@@ -78,3 +78,21 @@ def test_sessao_nao_deixa_compra_parcial(banco_sql, monkeypatch):
             assert connection.scalar(text('SELECT count(*) FROM usuarios')) == 4
     finally:
         app.extensions['postgres'].fechar()
+
+
+@pytest.mark.postgres
+def test_banco_indisponivel_retorna_503_sem_credenciais(banco_sql, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    app = create_app(config=config_sql(banco_sql))
+    cliente = cliente_identificado(app)
+    store = app.extensions['postgres']
+    def falhar(*args, **kwargs):
+        raise OperationalError('postgresql://usuario:segredo@banco', {}, Exception('falha'))
+    monkeypatch.setattr(store.engine, 'connect', falhar)
+    try:
+        resposta = cliente.get('/api/livros')
+        assert resposta.status_code == 503
+        assert 'segredo' not in resposta.get_data(as_text=True)
+        assert 'postgresql://' not in resposta.get_data(as_text=True)
+    finally:
+        store.fechar()

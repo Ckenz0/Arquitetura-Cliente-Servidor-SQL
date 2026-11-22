@@ -1,0 +1,47 @@
+name: entrelinhas-sql
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: entrelinhas
+      POSTGRES_USER: entrelinhas
+      POSTGRES_PASSWORD: entrelinhas-local
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U entrelinhas -d entrelinhas']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build: .
+    ports:
+      - '127.0.0.1:5001:8000'
+    environment:
+      APP_ENV: development
+      STORAGE_BACKEND: postgresql
+      DATABASE_URL: postgresql+psycopg://entrelinhas:entrelinhas-local@postgres:5432/entrelinhas
+      SECRET_KEY: ${SECRET_KEY:-desenvolvimento-local-altere-antes-de-publicar}
+      ALLOWED_ORIGINS: http://127.0.0.1:8081,http://localhost:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    image: nginx:stable-alpine
+    ports:
+      - '127.0.0.1:8081:80'
+    volumes:
+      - ./client:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

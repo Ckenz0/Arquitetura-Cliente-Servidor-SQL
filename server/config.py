@@ -20,7 +20,7 @@ def configuracao(overrides=None):
         'APP_ENV': ambiente,
         'SECRET_KEY': chave or (None if producao else secrets.token_hex(32)),
         'ALLOWED_ORIGINS': origens or (() if producao else (
-            'http://127.0.0.1:8080', 'http://localhost:8080',
+            'http://127.0.0.1:8081', 'http://localhost:8081',
         )),
         'SESSION_TOKEN_MAX_AGE': 86400,
         'MAX_CONTENT_LENGTH': 1024 * 1024,

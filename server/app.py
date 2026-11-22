@@ -35,4 +35,4 @@ def create_app(livraria=None, config=None):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     app = create_app()
-    app.run(host='127.0.0.1', port=int(os.environ.get('PORT', '5000')), debug=False)
+    app.run(host='127.0.0.1', port=int(os.environ.get('PORT', '5001')), debug=False)

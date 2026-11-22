@@ -11,7 +11,7 @@ on:
       - 'startup.sh'
       - 'pytest.ini'
       - '.python-version'
-      - 'compose.yaml'
+      - 'compose.yml'
       - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/backend.yml'
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: entrelinhas-nosql-api-${{ github.ref }}
+  group: entrelinhas-sql-api-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      TEST_MONGODB_URI: mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true
+      TEST_DATABASE_URL: postgresql+psycopg://entrelinhas:entrelinhas-local@127.0.0.1:5433/entrelinhas
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -41,8 +41,8 @@ jobs:
             requirements.txt
             requirements-dev.txt
             server/requirements.txt
-      - name: Start MongoDB replica set
-        run: docker compose up -d --wait mongo
+      - name: Start PostgreSQL
+        run: docker compose up -d --wait postgres
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Test domain, persistence, concurrency and API

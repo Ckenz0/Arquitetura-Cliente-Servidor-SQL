@@ -206,3 +206,60 @@ def test_commit_incerto_nao_repete_reserva(banco_sql, monkeypatch):
     outra = loja_persistente(banco_sql)
     assert outra.livro('1984')['estoque'] == 2
     assert len(outra.reservas('ana')) == 1
+
+
+@pytest.mark.parametrize('recupera', [True, False])
+def test_deadlock_aborta_e_repete_sem_duplicar(banco_sql, monkeypatch, recupera):
+    from psycopg.errors import DeadlockDetected
+    from server.persistence.postgres import BancoIndisponivel
+    loja = preparar(banco_sql)
+    confirmar = loja.persistencia._commit
+    tentativas = []
+    def confirmar_com_conflito(transaction):
+        tentativas.append(1)
+        if not recupera or len(tentativas) == 1:
+            raise OperationalError('commit', {}, DeadlockDetected('conflito'))
+        confirmar(transaction)
+    monkeypatch.setattr(loja.persistencia, '_commit', confirmar_com_conflito)
+    if recupera:
+        loja.reservar('ana', '1984', prazo())
+    else:
+        with pytest.raises(BancoIndisponivel):
+            loja.reservar('ana', '1984', prazo())
+    monkeypatch.setattr(loja.persistencia, '_commit', confirmar)
+    assert loja.livro('1984')['estoque'] == (2 if recupera else 3)
+    assert len(loja.reservas('ana')) == (1 if recupera else 0)
+    if not recupera:
+        assert len(tentativas) == 3
+
+
+def test_email_concorrente_entre_instancias(banco_sql):
+    preparar(banco_sql)
+    barreira = Barrier(2)
+    def cadastrar(numero):
+        loja = loja_persistente(banco_sql)
+        barreira.wait(timeout=10)
+        try:
+            loja.atualizar_perfil(f'cliente-{numero}', 'Leitor', 'mesmo@example.com')
+            return 200
+        except ErroLivraria as erro:
+            return erro.status
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert sorted(executor.map(cadastrar, [1, 2])) == [200, 409]
+    with banco_sql.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM usuarios WHERE email='mesmo@example.com'")) == 1
+
+
+def test_instancia_se_recupera_apos_erro_de_escrita(banco_sql, monkeypatch):
+    from server.persistence.postgres import BancoIndisponivel
+    loja = preparar(banco_sql)
+    confirmar = loja.persistencia._commit
+    def falhar(transaction):
+        raise IntegrityError('write', {}, Exception('falha de escrita'))
+    monkeypatch.setattr(loja.persistencia, '_commit', falhar)
+    with pytest.raises(BancoIndisponivel):
+        loja.reservar('ana', '1984', prazo())
+    monkeypatch.setattr(loja.persistencia, '_commit', confirmar)
+    assert loja.livro('1984')['estoque'] == 3
+    assert loja.reservas('ana') == []
+    assert loja.reservar('ana', '1984', prazo())['status'] == 'pendente'

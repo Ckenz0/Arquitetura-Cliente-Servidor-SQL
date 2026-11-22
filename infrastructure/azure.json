@@ -4,7 +4,7 @@
   "parameters": {
     "prefix": {
       "type": "string",
-      "defaultValue": "entrelinhas-nosql"
+      "defaultValue": "entrelinhas-sql"
     },
     "suffix": {
       "type": "string",
@@ -22,77 +22,92 @@
       "type": "securestring",
       "minLength": 32
     },
-    "enableFreeTier": {
-      "type": "bool",
-      "defaultValue": true
+    "postgresAdminPassword": {
+      "type": "securestring",
+      "minLength": 16
+    },
+    "databasePassword": {
+      "type": "securestring",
+      "minLength": 16
+    },
+    "adminIp": {
+      "type": "string"
     }
   },
   "variables": {
-    "cosmosName": "[concat(parameters('prefix'), '-', parameters('suffix'))]",
+    "pgName": "[concat(parameters('prefix'), '-pg-', parameters('suffix'))]",
     "apiName": "[concat(parameters('prefix'), '-api-', parameters('suffix'))]",
     "frontName": "[concat(parameters('prefix'), '-front-', parameters('suffix'))]",
-    "planName": "[concat(parameters('prefix'), '-plan')]",
-    "database": "entrelinhas",
-    "collection": "livraria"
+    "planName": "[concat(parameters('prefix'), '-plan')]"
   },
   "resources": [
     {
-      "type": "Microsoft.DocumentDB/databaseAccounts",
-      "apiVersion": "2024-05-15",
-      "name": "[variables('cosmosName')]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "apiVersion": "2024-08-01",
+      "name": "[variables('pgName')]",
       "location": "[parameters('location')]",
-      "kind": "MongoDB",
+      "sku": {
+        "name": "Standard_B1ms",
+        "tier": "Burstable"
+      },
       "properties": {
-        "databaseAccountOfferType": "Standard",
-        "enableFreeTier": "[parameters('enableFreeTier')]",
-        "locations": [
-          {
-            "locationName": "[parameters('location')]",
-            "failoverPriority": 0
-          }
-        ],
-        "capabilities": [
-          {
-            "name": "EnableMongo"
-          }
-        ],
-        "apiProperties": {
-          "serverVersion": "7.0"
+        "version": "17",
+        "administratorLogin": "entrelinhasadmin",
+        "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
+        "storage": {
+          "storageSizeGB": 32,
+          "autoGrow": "Disabled"
         },
-        "consistencyPolicy": {
-          "defaultConsistencyLevel": "Session"
+        "backup": {
+          "backupRetentionDays": 7,
+          "geoRedundantBackup": "Disabled"
         },
-        "minimalTlsVersion": "Tls12"
-      }
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases",
-      "apiVersion": "2024-05-15",
-      "name": "[concat(variables('cosmosName'), '/', variables('database'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts',variables('cosmosName'))]"
-      ],
-      "properties": {
-        "resource": {
-          "id": "[variables('database')]"
+        "highAvailability": {
+          "mode": "Disabled"
         },
-        "options": {}
-      }
-    },
-    {
-      "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections",
-      "apiVersion": "2024-05-15",
-      "name": "[concat(variables('cosmosName'), '/', variables('database'), '/', variables('collection'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases',variables('cosmosName'),variables('database'))]"
-      ],
-      "properties": {
-        "resource": {
-          "id": "[variables('collection')]"
+        "network": {
+          "publicNetworkAccess": "Enabled"
         },
-        "options": {
-          "throughput": 400
+        "authConfig": {
+          "activeDirectoryAuth": "Disabled",
+          "passwordAuth": "Enabled"
         }
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+      "apiVersion": "2024-08-01",
+      "name": "[concat(variables('pgName'), '/entrelinhas')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers',variables('pgName'))]"
+      ],
+      "properties": {
+        "charset": "UTF8",
+        "collation": "en_US.utf8"
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+      "apiVersion": "2024-08-01",
+      "name": "[concat(variables('pgName'), '/AzureServices')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers',variables('pgName'))]"
+      ],
+      "properties": {
+        "startIpAddress": "0.0.0.0",
+        "endIpAddress": "0.0.0.0"
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+      "apiVersion": "2024-08-01",
+      "name": "[concat(variables('pgName'), '/AdminCurrentIp')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers',variables('pgName'))]"
+      ],
+      "properties": {
+        "startIpAddress": "[parameters('adminIp')]",
+        "endIpAddress": "[parameters('adminIp')]"
       }
     },
     {
@@ -130,7 +145,7 @@
       "dependsOn": [
         "[resourceId('Microsoft.Web/serverfarms',variables('planName'))]",
         "[resourceId('Microsoft.Web/staticSites',variables('frontName'))]",
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections',variables('cosmosName'),variables('database'),variables('collection'))]"
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases',variables('pgName'),'entrelinhas')]"
       ],
       "properties": {
         "httpsOnly": true,
@@ -148,7 +163,7 @@
             },
             {
               "name": "STORAGE_BACKEND",
-              "value": "mongodb"
+              "value": "postgresql"
             },
             {
               "name": "SECRET_KEY",
@@ -156,19 +171,11 @@
             },
             {
               "name": "ALLOWED_ORIGINS",
-              "value": "[concat('https://', reference(resourceId('Microsoft.Web/staticSites',variables('frontName')),'2023-12-01').defaultHostname)]"
+              "value": "[concat('https://',reference(resourceId('Microsoft.Web/staticSites',variables('frontName')),'2023-12-01').defaultHostname)]"
             },
             {
-              "name": "MONGODB_URI",
-              "value": "[listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts',variables('cosmosName')),'2024-05-15').connectionStrings[0].connectionString]"
-            },
-            {
-              "name": "MONGODB_DATABASE",
-              "value": "[variables('database')]"
-            },
-            {
-              "name": "MONGODB_COLLECTION",
-              "value": "[variables('collection')]"
+              "name": "DATABASE_URL",
+              "value": "[concat('postgresql+psycopg://entrelinhas_app:',uriComponent(parameters('databasePassword')),'@',reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers',variables('pgName')),'2024-08-01').fullyQualifiedDomainName,':5432/entrelinhas?sslmode=require')]"
             },
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
@@ -182,11 +189,15 @@
   "outputs": {
     "frontendUrl": {
       "type": "string",
-      "value": "[concat('https://', reference(resourceId('Microsoft.Web/staticSites',variables('frontName')),'2023-12-01').defaultHostname)]"
+      "value": "[concat('https://',reference(resourceId('Microsoft.Web/staticSites',variables('frontName')),'2023-12-01').defaultHostname)]"
     },
     "apiUrl": {
       "type": "string",
-      "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites',variables('apiName')),'2023-12-01').defaultHostName)]"
+      "value": "[concat('https://',reference(resourceId('Microsoft.Web/sites',variables('apiName')),'2023-12-01').defaultHostName)]"
+    },
+    "postgresHost": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers',variables('pgName')),'2024-08-01').fullyQualifiedDomainName]"
     }
   }
 }

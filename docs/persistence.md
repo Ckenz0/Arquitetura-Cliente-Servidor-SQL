@@ -1,87 +1,85 @@
-﻿# Persistência da livraria
+﻿# Persistência relacional
 
-## Organização documental
+## Modelo de dados
 
-A coleção `livraria` contém documentos independentes com `_id`, `tipo` e `dados`.
-O `_id` combina tipo e identificador de negócio, como `livros:1984`.
+O PostgreSQL armazena entidades e relacionamentos em tabelas próprias. `usuarios`
+contém colunas nativas para `id`, `nome`, `email`, `telefone` e configuração de
+notificações; dados pessoais não são guardados em um documento genérico.
 
-| Tipo | Conteúdo persistido |
+| Tabelas | Conteúdo |
 | --- | --- |
-| `livros` | Catálogo, estoque, códigos, localização e avaliações iniciais |
-| `clientes` | Preferências, desejos, compras, pontos, cupons e notificações |
-| `reservas` | Cliente, livro, prazo, embrulho e status |
-| `avaliacoes` | Livro, cliente, nota, comentário e data |
-| `acompanhamentos` | Leitores que aguardam reposição de um livro |
-| `horarios` | Horário do livreiro e cliente agendado |
-| `eventos` | Agenda, capacidade, inscritos e lembretes enviados |
-| `clubes` | Membros e opiniões publicadas |
-| `fila` | Ordem dos clientes na fila virtual |
-| `loja` | Horário de funcionamento e lotação |
-| `migracoes` | Versões aplicadas e data da carga inicial |
+| `usuarios`, `preferencias_generos`, `preferencias_temas` | Perfil e preferências |
+| `livros`, `avaliacoes_iniciais` | Catálogo, estoque, preço e avaliações ilustrativas |
+| `reservas`, `avisos_estoque`, `desejos` | Reservas e interesse em livros |
+| `compras`, `cupons`, `notificacoes` | Histórico, fidelidade e avisos |
+| `horarios`, `fila`, `loja` | Atendimento e funcionamento |
+| `eventos`, `inscricoes_eventos` | Agenda e inscrições |
+| `clubes`, `membros_clubes`, `opinioes_clubes` | Comunidade |
+| `avaliacoes` | Notas e comentários de usuários |
+| `schema_migrations` | Versões de inicialização aplicadas |
 
-Conjuntos do domínio são convertidos em listas BSON e restaurados ao carregar
-a transação. Pontos e recomendações continuam sendo calculados pelas regras
-existentes, a partir das compras e preferências persistidas.
+Chaves estrangeiras mantêm as referências entre usuários, livros e operações.
+Restrições `CHECK` impedem estoque, pontos e capacidade negativos e notas fora de
+1 a 5. E-mails são normalizados e exclusivos; cada usuário avalia um livro uma vez.
+Preços usam `NUMERIC(12,2)` e datas usam `TIMESTAMP WITH TIME ZONE`.
 
-## Consistência
+O único `JSONB` é `compras.livro_snapshot`: uma cópia histórica imutável dos dados
+do livro no momento da compra, independente das alterações futuras no catálogo.
+As entidades operacionais e suas relações continuam em colunas e tabelas SQL.
 
-`MongoStore` abre uma sessão e uma transação por operação externa do serviço.
-Chamadas internas compartilham essa transação. Os documentos são lidos do banco,
-convertidos para os repositórios de trabalho e comparados ao final. Somente as
-inclusões, alterações e exclusões são enviadas ao banco.
+## Transações
 
-Uma reserva e sua baixa de estoque são confirmadas juntas; um cancelamento
-e a devolução do exemplar também. Exceções abortam a operação. A transação protege
-operações de instâncias diferentes, além do bloqueio de threads de cada processo.
+`PostgresStore` envolve cada operação externa do serviço em uma transação. Antes
+de ler o estado, obtém um advisory lock transacional PostgreSQL compartilhado entre
+instâncias. Chamadas internas reutilizam a mesma operação; o bloqueio local protege
+a visão de trabalho entre threads, e o banco coordena processos diferentes.
 
-Conflitos transitórios repetem a transação até três vezes. Se a confirmação do
-commit for incerta, somente a confirmação é repetida, sem refazer a reserva.
-Após falha de comunicação, consulte o estado antes de tentar uma mutação novamente.
-A API retorna 503 sem expor detalhes da URI ou credenciais.
+Depois de executar as regras, somente as linhas alteradas são gravadas, respeitando
+a ordem das chaves estrangeiras. Reserva e baixa de estoque são confirmadas juntas;
+cancelamento e devolução do exemplar também. Erros provocam rollback.
 
-A coleção é única e **não particionada** porque o Cosmos DB for MongoDB baseado
-em RU não suporta transações entre coleções ou partições. Consulte a
-[documentação de transações da Microsoft](https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/use-multi-document-transactions).
+Apenas deadlocks e falhas de serialização explicitamente abortadas são repetidos,
+até três tentativas. Perda de conexão ou commit incerto retorna 503 sem reexecutar
+a mutação. Consulte o estado antes de repetir uma operação após falha de comunicação.
+Erros públicos não incluem a URL, parâmetros SQL ou credenciais.
 
-## Migrações
+## Migração e carga inicial
 
 ```powershell
 .venv\Scripts\python.exe -m server.migrate
 ```
 
-A versão 1 cadastra 12 livros e os dados iniciais de loja, agenda e comunidade.
-O marcador `migracoes:1` é gravado na mesma transação. Reiniciar ou executar o
-comando novamente preserva o estoque, os IDs, as datas e os dados de clientes.
-Se a migração falhar, nenhuma parte da carga é confirmada.
+O esquema é criado transacionalmente pelos metadados SQLAlchemy, sob o mesmo
+bloqueio de migração. A carga v1 e seu marcador são confirmados juntos: 12 livros,
+quatro usuários fictícios, loja, horários, eventos e clube. Uma nova execução
+preserva dados e datas já existentes. Não há importação automática de dados
+privados de outras implantações.
 
-Os dados demonstrativos do projeto anterior eram voláteis. Não existe um banco
-legado do qual recuperar alterações de processos já encerrados. Esta migração
-materializa a carga inicial e passa a persistir todas as operações seguintes.
-Os preços e códigos do catálogo são ilustrativos.
+Os quatro perfis iniciais são Ana Silva, Bruno Costa, Carla Souza e Diego Lima,
+com endereços do domínio `example.com` e telefones ilustrativos. Eles não fornecem
+credenciais de acesso. Novas sessões usam identificadores próprios, e o cadastro
+de informações pessoais acontece em **Meu perfil**.
 
-Para consultar livros diretamente, use uma conexão autenticada do `mongosh`:
+Com uma conexão autenticada do `psql`:
 
-```javascript
-use entrelinhas
-db.livraria.countDocuments({tipo: 'livros'})
-db.livraria.find({tipo: 'livros'}, {_id: 0, dados: 1})
-db.livraria.find({tipo: 'migracoes'})
+```sql
+SELECT id, nome, email, telefone FROM usuarios WHERE email IS NOT NULL;
+SELECT count(*) FROM livros;
+SELECT * FROM schema_migrations;
+SELECT r.id, u.nome, l.titulo, r.status
+FROM reservas r
+JOIN usuarios u ON u.id = r.usuario_id
+JOIN livros l ON l.id = r.livro_id;
 ```
 
 ## Limites operacionais
 
-O servidor MongoDB local precisa ser um replica set. O Compose prepara um nó
-único para desenvolvimento e testes; isso não fornece redundância de produção.
-A implantação Azure usa Cosmos DB for MongoDB 7.0, baseado em RU,
-com coleção não particionada.
+A leitura integral das tabelas e o bloqueio global simplificam a adaptação das
+regras existentes, mas limitam concorrência e volume. O timeout de espera do lock
+é quatro segundos e o de cada instrução é oito segundos. Requisições que excedem
+os limites recebem falha explícita; não há fallback para memória em produção.
+O pool é limitado a quatro conexões, com até duas extras temporárias por processo.
 
-O Cosmos limita a duração de uma transação a cinco segundos. Ler todos os
-documentos por operação simplifica a preservação das regras do MVP, mas aumenta
-o consumo de RU e a duração das operações conforme o banco cresce. Fila, compras
-e opiniões também exigem limites de retenção e paginação para crescer com segurança.
-O modelo não foi dimensionado para alto volume ou coleções particionadas.
-
-A dependência PyMongo é limitada à série 4.20, validada com Cosmos DB for MongoDB
-7.0 e com o MongoDB 7.0 local. Aguarde a propagação da versão do Cosmos antes de
-iniciar a API; o endpoint precisa oferecer um protocolo compatível. Consulte a
-[tabela de compatibilidade do driver](https://www.mongodb.com/docs/drivers/compatibility/?driver-language=python&python-driver-framework=pymongo).
+Para alto volume, adote consultas por usuário/agregado, paginação e bloqueios mais
+específicos. Alterações futuras de esquema precisam de migrações versionadas;
+`create_all` não altera colunas de uma tabela já existente.
