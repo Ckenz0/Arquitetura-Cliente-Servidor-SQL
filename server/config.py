@@ -2,11 +2,12 @@
 
 import os
 import secrets
-import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 def configuracao(overrides=None):
@@ -23,11 +24,9 @@ def configuracao(overrides=None):
         )),
         'SESSION_TOKEN_MAX_AGE': 86400,
         'MAX_CONTENT_LENGTH': 1024 * 1024,
-        'STORAGE_BACKEND': os.environ.get('STORAGE_BACKEND', 'mongodb'),
-        'MONGODB_URI': os.environ.get('MONGODB_URI', '' if producao else
-            'mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true'),
-        'MONGODB_DATABASE': os.environ.get('MONGODB_DATABASE', 'entrelinhas'),
-        'MONGODB_COLLECTION': os.environ.get('MONGODB_COLLECTION', 'livraria'),
+        'STORAGE_BACKEND': os.environ.get('STORAGE_BACKEND', 'postgresql'),
+        'DATABASE_URL': os.environ.get('DATABASE_URL', '' if producao else
+            'postgresql+psycopg://entrelinhas:entrelinhas-local@127.0.0.1:5433/entrelinhas'),
     }
     config.update(overrides or {})
     producao = config['APP_ENV'] == 'production'
@@ -46,15 +45,18 @@ def configuracao(overrides=None):
         if '*' in origem:
             raise ValueError('Não use curingas em ALLOWED_ORIGINS.')
     config['ALLOWED_ORIGINS'] = tuple(origens)
-    if config['STORAGE_BACKEND'] not in {'memory', 'mongodb'}:
-        raise ValueError('STORAGE_BACKEND deve ser mongodb ou memory.')
-    if producao and config['STORAGE_BACKEND'] != 'mongodb':
-        raise ValueError('Produção exige armazenamento MongoDB persistente.')
-    if config['STORAGE_BACKEND'] == 'mongodb':
-        uri = config['MONGODB_URI']
-        if not isinstance(uri, str) or not uri.startswith(('mongodb://', 'mongodb+srv://')):
-            raise ValueError('Informe MONGODB_URI válida apenas no servidor.')
-        for campo in ('MONGODB_DATABASE', 'MONGODB_COLLECTION'):
-            if not isinstance(config[campo], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,63}', config[campo]):
-                raise ValueError(f'{campo} deve conter apenas letras, números, hífen ou sublinhado (1–63).')
+    if config['STORAGE_BACKEND'] not in {'memory', 'postgresql'}:
+        raise ValueError('STORAGE_BACKEND deve ser postgresql ou memory.')
+    if producao and config['STORAGE_BACKEND'] != 'postgresql':
+        raise ValueError('Produção exige armazenamento PostgreSQL persistente.')
+    if config['STORAGE_BACKEND'] == 'postgresql':
+        try:
+            url = make_url(config['DATABASE_URL'])
+            valida = url.drivername in {'postgresql', 'postgresql+psycopg'} and url.host and url.database and url.username
+        except (ArgumentError, TypeError, ValueError):
+            valida = False
+        if not valida:
+            raise ValueError('Informe DATABASE_URL PostgreSQL válida apenas no servidor.') from None
+        if producao and url.query.get('sslmode') not in {'require', 'verify-ca', 'verify-full'}:
+            raise ValueError('Produção exige conexão PostgreSQL com TLS.')
     return config

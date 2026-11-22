@@ -1,1 +1,1 @@
-"""Persistência documental da livraria em Cosmos DB for MongoDB."""
+"""Persistência relacional da livraria em PostgreSQL."""

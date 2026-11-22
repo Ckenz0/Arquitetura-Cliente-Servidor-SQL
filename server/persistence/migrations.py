@@ -1,4 +1,4 @@
-"""Migração v1 idempotente: 12 livros e toda a demonstração persistente."""
+"""Migração relacional idempotente: catálogo, usuários e dados iniciais."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -52,6 +52,14 @@ def migrar(loja):
             if not loja.dados.listar(tipo):
                 for valor in demonstracao.dados.listar(tipo):
                     loja.dados.salvar(tipo, valor['id'], deepcopy(valor))
+        for numero, (nome, email, telefone) in enumerate([
+            ('Ana Silva', 'ana.silva@example.com', '+55 11 90000-0001'),
+            ('Bruno Costa', 'bruno.costa@example.com', '+55 11 90000-0002'),
+            ('Carla Souza', 'carla.souza@example.com', '+55 11 90000-0003'),
+            ('Diego Lima', 'diego.lima@example.com', '+55 11 90000-0004'),
+        ], 1):
+            cliente = loja._cliente(f'{numero:032x}')
+            cliente.update(nome=nome, email=email, telefone=telefone)
         loja.dados._migracoes = migracoes | {
             '1': {'nome': 'catalogo-e-dados-completos',
                   'aplicada_em': datetime.now(timezone.utc).isoformat()},

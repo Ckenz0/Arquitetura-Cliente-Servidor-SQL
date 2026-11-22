@@ -39,10 +39,9 @@ def servidores(request):
     cliente = ThreadingHTTPServer(('127.0.0.1', 0), partial(ClienteHandler, directory=str(ROOT / 'client')))
     origem = f'http://127.0.0.1:{cliente.server_port}'
     config = {'ALLOWED_ORIGINS': (origem,), 'SECRET_KEY': 'ambiente-de-interface-chave-estavel'}
-    if getattr(request, 'param', None) == 'mongodb':
-        collection = request.getfixturevalue('colecao_mongo')
-        config.update(STORAGE_BACKEND='mongodb', MONGODB_URI=os.environ['TEST_MONGODB_URI'],
-                      MONGODB_DATABASE=collection.database.name, MONGODB_COLLECTION=collection.name)
+    if getattr(request, 'param', None) == 'postgresql':
+        engine = request.getfixturevalue('banco_sql')
+        config.update(STORAGE_BACKEND='postgresql', DATABASE_URL=engine.url.render_as_string(hide_password=False))
     app = create_app(config=config)
     api = make_server('127.0.0.1', 0, app, threaded=True)
     api_url = f'http://127.0.0.1:{api.server_port}'
@@ -58,8 +57,8 @@ def servidores(request):
             servidor.server_close()
         for thread in threads:
             thread.join(timeout=5)
-        if 'mongo' in app.extensions:
-            app.extensions['mongo'].client.close()
+        if 'postgres' in app.extensions:
+            app.extensions['postgres'].fechar()
 
 
 @pytest.fixture

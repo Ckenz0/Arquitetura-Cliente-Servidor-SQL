@@ -4,12 +4,12 @@ import pytest
 from playwright.sync_api import expect
 
 from server.app import create_app
-from tests.test_persistencia_mongo import colecao_mongo
+from tests.test_persistencia_sql import banco_sql
 
 
 @pytest.mark.interface
-@pytest.mark.mongo
-@pytest.mark.parametrize('servidores', ['mongodb'], indirect=True)
+@pytest.mark.postgres
+@pytest.mark.parametrize('servidores', ['postgresql'], indirect=True)
 @pytest.mark.parametrize('largura,altura', [(1366, 900), (390, 844)])
 def test_interface_preserva_dados_apos_recriar_api(page, servidores, largura, altura):
     page.set_viewport_size({'width': largura, 'height': altura})
@@ -37,4 +37,4 @@ def test_interface_preserva_dados_apos_recriar_api(page, servidores, largura, al
         assert next(l for l in estado['livros'] if l['id'] == '1984')['estoque'] == 2
         assert not erros
     finally:
-        nova.extensions['mongo'].client.close()
+        nova.extensions['postgres'].fechar()
