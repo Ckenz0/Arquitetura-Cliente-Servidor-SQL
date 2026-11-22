@@ -9,7 +9,7 @@ import pytest
 from server.app import create_app
 from tests.helpers import cliente_identificado
 
-ORIGEM = 'http://127.0.0.1:8080'
+ORIGEM = 'http://127.0.0.1:8081'
 
 
 @pytest.fixture

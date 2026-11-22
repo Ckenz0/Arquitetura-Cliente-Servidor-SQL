@@ -7,6 +7,7 @@ from uuid import uuid4
 from contextlib import nullcontext
 
 from server.domain.avaliacao import Avaliacao
+from server.domain.perfil import validar_nome_email, validar_telefone
 from server.domain.regras import (
     ErroLivraria, NAO_INFORMADO, data_iso, inteiro_nao_negativo,
     texto_obrigatorio, validar_preferencias, validar_reserva,
@@ -67,9 +68,29 @@ class Livraria(Catalogo):
             cliente = {
                 "id": cliente_id, "generos": [], "temas_notificacao": None,
                 "desejos": [], "compras": [], "cupons": [], "notificacoes": [],
+                "nome": "", "email": "", "telefone": "",
             }
             self.dados.salvar("clientes", cliente_id, cliente)
         return cliente
+
+    @atomico
+    def perfil(self, cliente_id):
+        cliente = self._cliente(cliente_id)
+        return {campo: cliente.get(campo, '') for campo in ('id', 'nome', 'email', 'telefone')}
+
+    @atomico
+    def atualizar_perfil(self, cliente_id, nome, email, telefone=NAO_INFORMADO):
+        nome, email = validar_nome_email(nome, email)
+        if telefone is not NAO_INFORMADO:
+            telefone = validar_telefone(telefone)
+        if any(c['id'] != cliente_id and c.get('email', '').casefold() == email
+               for c in self.dados.listar('clientes')):
+            raise ErroLivraria('Este e-mail já está cadastrado.', 409)
+        cliente = self._cliente(cliente_id)
+        cliente.update(nome=nome, email=email)
+        if telefone is not NAO_INFORMADO:
+            cliente['telefone'] = telefone
+        return self.perfil(cliente_id)
 
     def _data(self, valor, futuro=False):
         return data_iso(valor, self.agora, futuro=futuro)
@@ -395,7 +416,7 @@ class Livraria(Catalogo):
         cliente = self._cliente(cliente_id)
         self.processar_lembretes()
         return {
-            "cliente": {k: deepcopy(cliente[k]) for k in ("id", "generos", "temas_notificacao")},
+            "cliente": {k: deepcopy(cliente[k]) for k in ("id", "generos", "temas_notificacao")} | self.perfil(cliente_id),
             "livros": self.buscar(), "reservas": self.reservas(cliente_id),
             "fidelidade": self.fidelidade(cliente_id), "loja": self.informacoes_loja(),
             "fila": {"posicao": self.dados.fila().index(cliente_id) + 1 if cliente_id in self.dados.fila() else None},

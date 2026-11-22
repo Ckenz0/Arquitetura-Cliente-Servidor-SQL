@@ -7,6 +7,7 @@ const localInput = value => { const d = new Date(value); return new Date(d.getTi
 const vazio = texto => `<div class="empty">${esc(texto)}</div>`;
 let estado = null, assinatura = '', atualizando = null, atualizarDepois = false, preferenciasDirty = false;
 let stream = null, cameraTimer = null, toastTimer = null;
+let perfilDirty = false, perfilIdentidade = null, perfilVersao = 0;
 // Um clube pode desaparecer da sessão atual durante a recuperação; o
 // rascunho pertence à página e sobrevive à remoção temporária do formulário.
 const rascunhosOpinioes = new Map();
@@ -102,6 +103,16 @@ function renderizarComunidade() {
 }
 
 function renderizarPerfil(generos) {
+  if (perfilIdentidade !== estado.cliente.id) {
+    perfilIdentidade = estado.cliente.id;
+    perfilDirty = false;
+    perfilVersao += 1;
+  }
+  if (!perfilDirty) {
+    for (const campo of ['nome', 'email', 'telefone']) {
+      $('#perfil-form').elements[campo].value = estado.cliente[campo] || '';
+    }
+  }
   const f = estado.fidelidade;
   $('#fidelidade').innerHTML = `<div class="loyalty-card"><div class="brand">entrelinhas</div><span class="label" style="color:#ced7c3">Seu saldo de fidelidade</span><strong>${f.saldo} <span style="font:14px system-ui">pontos</span></strong><div class="number">${esc(f.cartao.numero)}</div></div>`;
   $('#cupons').innerHTML = f.cupons.length ? f.cupons.map(c => `<div class="coupon"><strong>${esc(c.codigo)}</strong><div class="subtle">${esc(c.termos)}</div></div>`).join('') : vazio('Seus cupons da loja aparecerão aqui.');
@@ -276,6 +287,19 @@ document.addEventListener('submit', event => {
       $('#scan-dialog').close(); await abrirLivro(l.id); return;
     } else if (form.id === 'agendamento-form') {
       await api('/api/agendamentos', 'POST', {horario_id:values.get('horario_id')}); avisar('Atendimento agendado.');
+    } else if (form.id === 'perfil-form') {
+      const identidade = estado.cliente.id, versao = perfilVersao;
+      const perfil = await api('/api/perfil', 'PATCH', {
+        nome:values.get('nome'), email:values.get('email'), telefone:values.get('telefone'),
+      });
+      await atualizar();
+      if (estado.cliente.id !== identidade) return;
+      if (perfilVersao === versao) {
+        perfilDirty = false;
+        for (const campo of ['nome', 'email', 'telefone']) form.elements[campo].value = perfil[campo];
+      }
+      avisar('Seus dados foram salvos.');
+      return;
     } else if (form.id === 'preferencias-form') {
       await api('/api/preferencias', 'PATCH', {generos:values.getAll('generos'), temas_notificacao:values.getAll('temas')});
       preferenciasDirty = false; avisar('Suas preferências foram salvas.');
@@ -292,6 +316,7 @@ $('#busca').addEventListener('input', renderizarCatalogo);
 $('#genero').addEventListener('change', renderizarCatalogo);
 $('#lancamentos').addEventListener('change', renderizarCatalogo);
 $('#preferencias-form').addEventListener('change', () => { preferenciasDirty = true; });
+$('#perfil-form').addEventListener('input', () => { perfilDirty = true; perfilVersao += 1; });
 $('#scan-dialog').addEventListener('close', pararCamera);
 window.addEventListener('pagehide', pararCamera);
 window.addEventListener('livraria:sessao-invalida', () => {

@@ -128,4 +128,15 @@ def registrar_controladores(app, *, demonstracao=False):
             raise ErroLivraria("Informe gêneros e/ou temas de notificação.")
         return jsonify(loja.preferencias(cliente(), **corpo))
 
+    @blueprint.get('/api/perfil')
+    def perfil():
+        return jsonify(loja.perfil(cliente()))
+
+    @blueprint.patch('/api/perfil')
+    def atualizar_perfil():
+        corpo = dados('nome', 'email')
+        if set(corpo) - {'nome', 'email', 'telefone'}:
+            raise ErroLivraria('Envie apenas nome, e-mail e telefone.')
+        return jsonify(loja.atualizar_perfil(cliente(), **corpo))
+
     app.register_blueprint(blueprint)

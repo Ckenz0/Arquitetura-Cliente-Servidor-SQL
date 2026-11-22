@@ -1,11 +1,10 @@
 openapi: 3.1.0
 info:
   title: Entrelinhas — API cliente-servidor
-  version: 2.0.0
-  description: 'Contrato HTTP da livraria com persistência em Cosmos DB for MongoDB.
-    Clientes anônimos, sem login ou pagamentos. Todas as respostas são
-    no-store. OPTIONS permite apenas origens, métodos e cabeçalhos configurados e
-    não cria identidades.'
+  version: 2.1.0
+  description: Contrato HTTP da livraria com persistência relacional em PostgreSQL.
+    Clientes anônimos, sem login ou pagamentos. Todas as respostas são no-store. OPTIONS
+    permite apenas origens, métodos e cabeçalhos configurados e não cria identidades.
 servers:
 - url: http://127.0.0.1:5000
   description: API local; cliente em outra origem (porta 8080).
@@ -100,8 +99,8 @@ paths:
       summary: criar sessao anonima
       description: 'Cria identidade anônima, sem login, válida por 86400 segundos.
         Sem cookie; enviar token em Authorization: Bearer. Corpo ausente ou {}. Não
-        recebe cliente_id. Uma SECRET_KEY estável mantém os tokens válidos após
-        reiniciar o backend, dentro do prazo de 24 horas. Os dados permanecem no MongoDB.'
+        recebe cliente_id. Uma SECRET_KEY estável mantém os tokens válidos após reiniciar
+        o backend, dentro do prazo de 24 horas. Os dados permanecem no PostgreSQL.'
       responses:
         '201':
           description: Operação concluída.
@@ -907,6 +906,64 @@ paths:
               required: []
               additionalProperties: false
               minProperties: 1
+  /api/perfil:
+    get:
+      operationId: consultar_perfil
+      summary: Consultar meus dados
+      description: Retorna somente os dados do titular da sessao Bearer.
+      responses: &id001
+        '200':
+          description: Perfil da propria sessao.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Perfil'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '409':
+          $ref: '#/components/responses/Erro409'
+        '415':
+          $ref: '#/components/responses/Erro415'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '503':
+          $ref: '#/components/responses/Erro503'
+    patch:
+      operationId: atualizar_perfil
+      summary: Atualizar meus dados
+      description: Nome e email obrigatorios; telefone opcional. Email deve ser exclusivo.
+        Nao altera a identidade da sessao.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nome:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                telefone:
+                  type: string
+                  maxLength: 32
+              required:
+              - nome
+              - email
+              additionalProperties: false
+            example:
+              nome: Nova Leitora
+              email: leitora@example.com
+              telefone: '11999990000'
+      responses: *id001
 components:
   securitySchemes:
     SessaoAnonima:
@@ -1077,6 +1134,15 @@ components:
           - 'null'
           items:
             type: string
+        nome: &id002
+          type: string
+          maxLength: 120
+        email: &id003
+          type: string
+          maxLength: 254
+        telefone: &id004
+          type: string
+          maxLength: 32
       required:
       - id
       - generos
@@ -1329,6 +1395,19 @@ components:
       - historico
       - recomendacoes
       - notificacoes
+    Perfil:
+      type: object
+      properties:
+        id:
+          type: string
+        nome: *id002
+        email: *id003
+        telefone: *id004
+      required:
+      - id
+      - nome
+      - email
+      - telefone
   responses:
     Erro400:
       description: Entrada inválida.
@@ -1385,7 +1464,8 @@ components:
           schema:
             $ref: '#/components/schemas/Erro'
     Erro503:
-      description: Banco indisponível ou confirmação incerta. Consulte o estado antes de repetir uma mutação.
+      description: Banco indisponível ou confirmação incerta. Consulte o estado antes
+        de repetir uma mutação.
       content:
         application/json:
           schema:

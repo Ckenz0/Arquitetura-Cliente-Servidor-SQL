@@ -31,8 +31,11 @@ def registrar_http(app):
         if request.method == 'OPTIONS' and request.url_rule is not None:
             metodo = request.headers.get('Access-Control-Request-Method', '')
             headers = {h.strip().lower() for h in request.headers.get('Access-Control-Request-Headers', '').split(',') if h.strip()}
-            if metodo and metodo not in request.url_rule.methods - {'OPTIONS', 'HEAD'}:
-                raise ErroLivraria('Método não permitido.', 405)
+            regra = request.url_rule
+            if metodo:
+                # GET e PATCH podem ter regras distintas para o mesmo caminho.
+                regra, _ = app.url_map.bind_to_environ(request.environ).match(method=metodo, return_rule=True)
+            g.metodos_preflight = sorted(regra.methods - {'OPTIONS', 'HEAD'})
             if headers - {'authorization', 'content-type', 'accept'}:
                 raise ErroLivraria('Cabeçalho não permitido.', 403)
             return '', 204
@@ -48,7 +51,7 @@ def registrar_http(app):
             resposta.headers['Access-Control-Allow-Origin'] = origem
             resposta.headers['Access-Control-Expose-Headers'] = 'X-Request-ID'
             if request.method == 'OPTIONS' and resposta.status_code == 204:
-                resposta.headers['Access-Control-Allow-Methods'] = ', '.join(sorted(request.url_rule.methods - {'OPTIONS', 'HEAD'}))
+                resposta.headers['Access-Control-Allow-Methods'] = ', '.join(g.metodos_preflight)
                 resposta.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Accept'
                 resposta.headers['Access-Control-Max-Age'] = '600'
         duracao = (perf_counter() - g.get('inicio', perf_counter())) * 1000
