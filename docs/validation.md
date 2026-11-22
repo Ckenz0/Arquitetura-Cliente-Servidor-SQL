@@ -8,6 +8,24 @@ A suíte completa passou com **234 testes**, incluindo persistência, concorrên
 perfil, contrato e navegador. O build Docker também foi executado; o perfil
 permaneceu disponível na mesma sessão após reiniciar o contêiner da API.
 
+## Publicação
+
+Verificação em 22 de novembro de 2026:
+
+- O [workflow do frontend](https://github.com/Ckenz0/Arquitetura-Cliente-Servidor-SQL/actions/runs/45071616295)
+  concluiu a publicação; os arquivos públicos respondem HTTP 200.
+- O [workflow da API](https://github.com/Ckenz0/Arquitetura-Cliente-Servidor-SQL/actions/runs/45071616319)
+  validou e publicou o pacote. A verificação pública final falhou: o App Service
+  retornou `QuotaExceeded`/`Exceeded`, com HTTP 403 da própria plataforma.
+- A conexão direta com o PostgreSQL da Azure, usando o login da aplicação e TLS,
+  confirmou 12 livros e quatro perfis nomeados. A configuração de conexão do
+  App Service foi conferida com essa conexão.
+
+A execução pública da API, do Swagger UI e o teste de persistência após reiniciar
+o App Service permanecem pendentes da liberação da cota. A verificação local não
+substitui essas verificações públicas. Consulte as opções de plano em
+[deploy](deploy.md).
+
 ## Cobertura
 
 - Regras atuais da livraria, API, Bearer, CORS e contrato OpenAPI.

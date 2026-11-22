@@ -20,6 +20,12 @@ O PostgreSQL tem armazenamento e computação próprios; o custo depende da assi
 O template não pressupõe gratuidade desse serviço. Backup local por sete dias,
 sem alta disponibilidade e sem expansão automática de armazenamento.
 
+O plano da API usa `F1` por padrão. Esse plano tem cotas de execução; quando
+atingidas, a Azure pode interromper o aplicativo e responder HTTP 403 antes de
+encaminhar a requisição ao Flask. Consulte o estado e o uso no App Service.
+O parâmetro opcional `appServiceSku` aceita `B1`, que é pago e deve ser escolhido
+somente após avaliar o custo. Reaplicar o template sem esse parâmetro mantém F1.
+
 - [Frontend](https://salmon-field-0cba0d410.3.azurestaticapps.net).
 - [API](https://entrelinhas-sql-api-ckenz0.azurewebsites.net).
 - [Documentação interativa](https://entrelinhas-sql-api-ckenz0.azurewebsites.net/docs).
