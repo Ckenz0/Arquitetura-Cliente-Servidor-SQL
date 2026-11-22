@@ -7,6 +7,7 @@ from server.app import create_app
 from server.config import configuracao
 from tests.helpers import cliente_identificado
 from tests.test_persistencia_sql import banco_sql
+from server.persistence.postgres import LOCK_ID
 
 
 def test_postgresql_e_padrao_sem_fallback(monkeypatch):
@@ -95,4 +96,24 @@ def test_banco_indisponivel_retorna_503_sem_credenciais(banco_sql, monkeypatch):
         assert 'segredo' not in resposta.get_data(as_text=True)
         assert 'postgresql://' not in resposta.get_data(as_text=True)
     finally:
+        store.fechar()
+
+
+@pytest.mark.postgres
+def test_transacao_ociosa_libera_bloqueio_apos_interrupcao_do_processo(banco_sql):
+    app = create_app(config=config_sql(banco_sql))
+    store = app.extensions['postgres']
+    interrompida = store.engine.connect()
+    try:
+        interrompida.execute(text('SELECT pg_advisory_xact_lock(:lock)'), {'lock': LOCK_ID})
+        reiniciada = create_app(config=config_sql(banco_sql))
+        try:
+            assert reiniciada.test_client().get('/api/health').status_code == 200
+            cliente = cliente_identificado(reiniciada)
+            assert len(cliente.get('/api/livros').json) == 12
+        finally:
+            reiniciada.extensions['postgres'].fechar()
+    finally:
+        interrompida.invalidate()
+        interrompida.close()
         store.fechar()

@@ -80,6 +80,11 @@ regras existentes, mas limitam concorrência e volume. O timeout de espera do lo
 os limites recebem falha explícita; não há fallback para memória em produção.
 O pool é limitado a quatro conexões, com até duas extras temporárias por processo.
 
+Transações ociosas são encerradas pelo PostgreSQL após 15 segundos, liberando
+bloqueios deixados por um processo interrompido. Somente a criação do esquema
+aguarda até 20 segundos pelo bloqueio, com limite de 25 segundos por instrução,
+para permitir essa limpeza durante um reinício.
+
 Para alto volume, adote consultas por usuário/agregado, paginação e bloqueios mais
 específicos. Alterações futuras de esquema precisam de migrações versionadas;
 `create_all` não altera colunas de uma tabela já existente.

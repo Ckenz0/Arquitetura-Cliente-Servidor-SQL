@@ -25,15 +25,17 @@ class PostgresStore:
         self._executando = False
         loja.persistencia = self
 
-    def _lock(self, connection):
-        connection.exec_driver_sql("SET LOCAL lock_timeout = '4s'")
-        connection.exec_driver_sql("SET LOCAL statement_timeout = '8s'")
+    def _lock(self, connection, *, inicializacao=False):
+        connection.exec_driver_sql("SET LOCAL lock_timeout = '20s'" if inicializacao else
+                                   "SET LOCAL lock_timeout = '4s'")
+        connection.exec_driver_sql("SET LOCAL statement_timeout = '25s'" if inicializacao else
+                                   "SET LOCAL statement_timeout = '8s'")
         connection.execute(text('SELECT pg_advisory_xact_lock(:lock)'), {'lock': LOCK_ID})
 
     def criar_schema(self):
         try:
             with self.engine.begin() as connection:
-                self._lock(connection)
+                self._lock(connection, inicializacao=True)
                 metadata.create_all(connection)
         except SQLAlchemyError:
             raise BancoIndisponivel() from None

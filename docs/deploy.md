@@ -12,7 +12,7 @@ Grupo: `livraria-entrelinhas-sql`.
 | --- | --- | --- |
 | Frontend | `entrelinhas-sql-front-ckenz0` | Static Web Apps Free, Central US |
 | API | `entrelinhas-sql-api-ckenz0` | Python 3.12, Brazil South |
-| Plano | `entrelinhas-sql-plan` | App Service Linux F1 |
+| Plano | `entrelinhas-sql-plan` | App Service Linux Basic B1 |
 | PostgreSQL | `entrelinhas-sql-pg-ckenz0` | PostgreSQL 17, Burstable B1ms, 32 GB |
 | Identidade de CI | `entrelinhas-sql-github` | OIDC, acesso somente à nova API |
 
@@ -20,11 +20,11 @@ O PostgreSQL tem armazenamento e computação próprios; o custo depende da assi
 O template não pressupõe gratuidade desse serviço. Backup local por sete dias,
 sem alta disponibilidade e sem expansão automática de armazenamento.
 
-O plano da API usa `F1` por padrão. Esse plano tem cotas de execução; quando
-atingidas, a Azure pode interromper o aplicativo e responder HTTP 403 antes de
-encaminhar a requisição ao Flask. Consulte o estado e o uso no App Service.
-O parâmetro opcional `appServiceSku` aceita `B1`, que é pago e deve ser escolhido
-somente após avaliar o custo. Reaplicar o template sem esse parâmetro mantém F1.
+O ambiente publicado usa `B1`, que é pago. O template mantém `F1` como padrão
+para novas instalações; esse plano gratuito tem cotas de execução que podem
+interromper o aplicativo com HTTP 403 da Azure. Para preservar o plano B1 ao
+reaplicar o template neste ambiente, informe `appServiceSku` explicitamente.
+O template ativa Always On no B1 para manter a API inicializada.
 
 - [Frontend](https://salmon-field-0cba0d410.3.azurestaticapps.net).
 - [API](https://entrelinhas-sql-api-ckenz0.azurewebsites.net).
@@ -53,7 +53,8 @@ em `.env.azure.parameters.json`, ignorado pelo Git:
     "secretKey": {"value": "SUBSTITUA_POR_CHAVE_ALEATORIA_ESTAVEL_COM_32_CARACTERES"},
     "postgresAdminPassword": {"value": "SUBSTITUA_POR_SENHA_FORTE_DO_ADMINISTRADOR"},
     "databasePassword": {"value": "SUBSTITUA_POR_SENHA_FORTE_DA_APLICACAO"},
-    "adminIp": {"value": "SEU_IP_PUBLICO_ATUAL"}
+    "adminIp": {"value": "SEU_IP_PUBLICO_ATUAL"},
+    "appServiceSku": {"value": "B1"}
   }
 }
 ```
@@ -87,6 +88,7 @@ CREATE ROLE entrelinhas_app LOGIN;
 \password entrelinhas_app
 GRANT CONNECT ON DATABASE entrelinhas TO entrelinhas_app;
 GRANT USAGE, CREATE ON SCHEMA public TO entrelinhas_app;
+ALTER ROLE entrelinhas_app SET idle_in_transaction_session_timeout TO '15s';
 ```
 
 No prompt de `\password`, informe a mesma senha de `databasePassword`. O aplicativo
@@ -110,6 +112,10 @@ Runtime Python 3.12 em Linux, startup `bash startup.sh`, HTTPS obrigatório.
 A configuração de produção exige PostgreSQL com TLS e não aceita fallback para
 memória. A inicialização cria o esquema e aplica a carga idempotente. O endpoint
 `/api/health` também verifica a conexão com o banco.
+
+As conexões da aplicação encerram transações que ficam ociosas por 15 segundos.
+Isso permite ao PostgreSQL liberar bloqueios de um processo interrompido durante
+um reinício. O pool descarta conexões encerradas antes de reutilizá-las.
 
 ## GitHub Actions
 

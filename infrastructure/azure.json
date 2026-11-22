@@ -161,7 +161,7 @@
         "siteConfig": {
           "linuxFxVersion": "PYTHON|3.12",
           "appCommandLine": "bash startup.sh",
-          "alwaysOn": false,
+          "alwaysOn": "[equals(parameters('appServiceSku'),'B1')]",
           "minTlsVersion": "1.2",
           "ftpsState": "Disabled",
           "appSettings": [

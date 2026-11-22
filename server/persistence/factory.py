@@ -14,7 +14,8 @@ def criar_livraria_postgres(config):
         url = make_url(config['DATABASE_URL']).set(drivername='postgresql+psycopg')
         engine = create_engine(url, pool_size=4, max_overflow=2, pool_timeout=4,
                                pool_pre_ping=True, pool_recycle=120, hide_parameters=True,
-                               connect_args={'connect_timeout': 4, 'options': '-c timezone=UTC'})
+                               connect_args={'connect_timeout': 4,
+                                             'options': '-c timezone=UTC -c idle_in_transaction_session_timeout=15s'})
         loja = Livraria()
         store = PostgresStore(loja, engine)
         store.criar_schema()
